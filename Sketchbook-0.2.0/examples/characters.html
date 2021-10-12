@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Sketchbook - Characters</title>
+    <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Roboto+Condensed" rel="stylesheet">
+</head>
+
+<body>
+
+    <div id="loader">
+        Loading...
+    </div>
+
+    <div id="controls-menu" class="controls-card" style="display: none">
+        <div class="controls-ctrl"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span><span class="ctrl-desc"></span>movement</span></div>
+        <div class="controls-ctrl"><span class="key">Shift</span><span class="ctrl-desc">sprint</span></div>
+        <div class="controls-ctrl"><span class="key">Space</span><span class="ctrl-desc"></span>jump</span></div>
+        <div class="controls-ctrl"><span class="key">F</span><span class="ctrl-desc"></span>spawn a ball</span></div>
+        <div class="controls-ctrl"><span class="key">T</span><span class="ctrl-desc"></span>toggle slow motion</span></div>
+        <div class="controls-ctrl"><span class="key">V</span><span class="ctrl-desc"></span>change view distance</span></div>
+        <div class="controls-ctrl"><span class="key">Shift</span>&nbsp;+&nbsp;<span class="key">C</span><span class="ctrl-desc"></span>free camera</span></div>
+    </div>
+    
+    <script src="../build/three.min.js"></script>
+    <script src="../build/cannon.min.js"></script>
+    <script src="../build/sketchbook.min.js"></script>
+    <script src="https://cdn.glitch.me/cbed381b-899f-43c2-9563-03b4fcd3f40c%2FC2T.js?v=1633371884807"></script>
+    <script>
+        const SB = Sketchbook;
+
+        //
+        // Initialize
+        //
+
+        // Instantiate loaders
+        const fbxLoader = new SB.FBXLoader();
+        const gltfLoader = new SB.GLTFLoader();
+
+        // Initialize sketchbook
+        let world = new SB.World();
+
+        // Hide ui for loading
+        document.getElementsByClassName('dg ac')[0].style.display = 'none';
+        document.getElementsByClassName('statsBox')[0].style.display = 'none';
+
+        // Setup camera
+        world.cameraController.theta = 360;
+        world.cameraController.target.z = -3;
+        world.cameraController.target.y = 2;
+
+        // Load world geometry
+        LoadExampleWorld(world);
+
+        //
+        // Load characters
+        //
+
+        // Spawn player
+        let player = new SB.Character({
+            position: new THREE.Vector3(1.13, 3, -2.2)
+        });
+        LoadBoxmanModel(player);
+        world.add(player);
+        player.takeControl();
+
+        // Make player look at the camera
+        player.setOrientationTarget(new THREE.Vector3(0, 0, -1));
+        player.orientation = new THREE.Vector3(0, 0, -1);
+
+        // Spawn John
+        let john = new SB.Character({
+            position: new THREE.Vector3(5, 2, 1)
+        });
+        LoadBoxmanModel(john);
+        john.setBehaviour(new Sketchbook.CharacterAI.Random());
+        world.add(john);
+
+        // Spawn Bob
+        let bob = new SB.Character({
+            position: new THREE.Vector3(-5, 2, 3)
+        });
+        LoadBoxmanModel(bob);
+        bob.setBehaviour(new Sketchbook.CharacterAI.FollowCharacter(player));
+        world.add(bob);
+        
+        //
+        // Functions
+        //
+
+        function LoadBoxmanModel(character) {	
+            fbxLoader.load('https://raw.githubusercontent.com/jackm201/PixelQuest/gh-pages/game_man.fbx', function (object) {	
+                object.traverse(function (child) {	
+                    if (child.isMesh) {	
+                        child.castShadow = true;
+                        child.receiveShadow = true;	
+                    }	
+                    if (child.name == 'game_man') {	
+                        child.material = new THREE.MeshLambertMaterial({	
+                            map: new THREE.TextureLoader().load('https://raw.githubusercontent.com/jackm201/PixelQuest/gh-pages/unnamed.png'),	
+                            skinning: true	
+                        });	
+                    }	
+                });	
+                character.setModel(object);	
+                character.setModelOffset(new THREE.Vector3(0, -0.1, 0));	
+
+                // Hide loader, display ui
+                document.getElementsByClassName('dg ac')[0].style.display = 'block';
+                document.getElementsByClassName('statsBox')[0].style.display = 'block';
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('controls-menu').style.display = 'block';
+            });	
+        }
+
+        function LoadExampleWorld(world) {
+
+            //World
+            gltfLoader.load('https://raw.githubusercontent.com/jackm201/PixelQuest/gh-pages/scene.glb', function (object)
+            {
+                world.graphicsWorld.add(object.scene);
+
+                object.scene.traverse(function(obj) {
+                        if(obj.userData.mass !== undefined) {
+                            obj.visible = false;
+                        }
+                        else
+                        {
+                            if(obj.userData.visible === 'true') {
+
+                                let mapOverride = undefined;
+                                if(obj.userData.map !== undefined) {
+                                    mapOverride = new THREE.TextureLoader().load('https://raw.githubusercontent.com/jackm201/PixelQuest/gh-pages/' + obj.userData.map);
+                                }
+                                else {
+                                    mapOverride = obj.material.map;
+                                }
+
+                                obj.material = new THREE.MeshLambertMaterial({	
+                                        map: mapOverride
+                                    });	
+                                obj.castShadow = true;
+                                obj.receiveShadow = true;
+                                // world.graphicsWorld.add(obj);
+                            }
+                            else if(obj.userData.visible === 'false')
+                            {
+                                obj.visible = false;
+                            }
+
+                            if(obj.userData.physics == 'convex') {
+
+                                let mass = obj.userData.mass;
+                                if(mass === undefined) mass = 0;
+
+                                let phys = new SB.ObjectPhysics.Convex(obj, {
+                                    mass: mass
+                                });
+
+                                let SBobj = new SB.Object();
+                                SBobj.setPhysics(phys);
+
+                                world.add(SBobj);
+                            }
+
+                            if(obj.userData.physics == 'trimesh') {
+
+                                let mass = obj.userData.mass || 0;
+
+                                let phys = new SB.ObjectPhysics.TriMesh(obj, {
+                                    mass: mass
+                                });
+
+                                let SBobj = new SB.Object();
+                                SBobj.setPhysics(phys);
+
+                                world.add(SBobj);
+                            }
+                        }
+                });
+            });
+            let phys2 = new SB.ObjectPhysics.Box({ 
+                mass: 1,
+                        position: new CANNON.Vec3(0, 20, 0),
+                        size: new CANNON.Vec3(1, 1, 1),
+                        friction: .3
+                    })
+                    let SBobj2 = new SB.Object();
+                    SBobj2.setPhysics(phys2);
+                    world.add(SBobj2);
+                    let ph = phys2.getVisualModel();
+                    world.graphicsWorld.add(ph)
+        }
+    </script>
+</body>
+</html>
